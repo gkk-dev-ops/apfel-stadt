@@ -1,0 +1,5 @@
+- [ ] Rename application "apfel stadt"
+- [ ] Add better UX menu - hidden under espace, automatically stopping time
+- [ ] Upgrade graphic to 2.5D isometric view. With camera that can move around bigger map.
+- [ ] Add procedural generation of map
+- [ ] Add different weather conditions (rain, snow, fog, etc.)
