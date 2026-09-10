@@ -1,0 +1,8 @@
+*
+!apps/
+!apps/sync-api/
+!apps/sync-api/**
+!cloudbuild.yaml
+apps/sync-api/node_modules/
+apps/sync-api/dist/
+apps/sync-api/.env*

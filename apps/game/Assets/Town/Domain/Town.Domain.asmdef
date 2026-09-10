@@ -1,0 +1,6 @@
+{
+  "name": "Town.Domain",
+  "rootNamespace": "Town.Domain",
+  "autoReferenced": true,
+  "noEngineReferences": true
+}

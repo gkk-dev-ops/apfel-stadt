@@ -1,0 +1,46 @@
+name: Manual Apple build
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        options: [macos, ios]
+        default: macos
+      configuration:
+        type: choice
+        options: [development, release]
+        default: development
+permissions:
+  contents: read
+concurrency:
+  group: unity-apple-runner
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS, ARM64, town-unity]
+    env:
+      UNITY_EDITOR: ${{ vars.UNITY_EDITOR }}
+      BUNDLE_ID: ${{ vars.BUNDLE_ID }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      BUILD_CONFIGURATION: ${{ inputs.configuration }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      AUTH_API_KEY: ${{ vars.AUTH_API_KEY }}
+      AUTH_PROJECT_ID: ${{ vars.AUTH_PROJECT_ID }}
+      TOWN_TARGET: ${{ inputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - run: scripts/unity.sh prepare
+      - run: scripts/unity.sh "$TOWN_TARGET"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apple-build-${{ inputs.target }}
+          path: |
+            builds/
+            logs/
+          retention-days: 7
+# Trusted main only. macOS runner must already have Hub license, toolchain and modules.
+# This exports iOS; cable signing/install remains a deliberate local step.

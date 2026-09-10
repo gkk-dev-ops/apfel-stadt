@@ -1,0 +1,21 @@
+<linker>
+  <assembly fullname="Town.Domain" preserve="all" />
+  <assembly fullname="Assembly-CSharp">
+    <type fullname="Town.Runtime.ClientConfig" preserve="all" />
+    <type fullname="Town.Runtime.LoginBody" preserve="all" />
+    <type fullname="Town.Runtime.LoginReply" preserve="all" />
+    <type fullname="Town.Runtime.RefreshReply" preserve="all" />
+    <type fullname="Town.Runtime.RemoteWorld" preserve="all" />
+    <type fullname="Town.Runtime.WorldList" preserve="all" />
+    <type fullname="Town.Runtime.RemoteRevision" preserve="all" />
+    <type fullname="Town.Runtime.HistoryList" preserve="all" />
+    <type fullname="Town.Runtime.Receipt" preserve="all" />
+    <type fullname="Town.Runtime.CreateBody" preserve="all" />
+    <type fullname="Town.Runtime.RestoreBody" preserve="all" />
+  </assembly>
+  <assembly fullname="UnityEngine.PhysicsModule">
+    <type fullname="UnityEngine.BoxCollider" preserve="all" />
+    <type fullname="UnityEngine.SphereCollider" preserve="all" />
+    <type fullname="UnityEngine.CapsuleCollider" preserve="all" />
+  </assembly>
+</linker>

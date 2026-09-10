@@ -1,0 +1,15 @@
+project_id = "YOUR_EXISTING_GCP_PROJECT"
+region = "europe-west1"
+environment = "dev"
+enable_api = false
+api_image = ""
+allowed_user_uids = []
+# Set after creating tester accounts through Identity Platform admin console/API.
+# allowed_user_uids = ["AGATA_UID", "GRZEGORZ_UID"]
+# Supply the account's actual currency; default EUR is a placeholder preference.
+billing_account_id = ""
+budget_currency = "EUR"
+budget_amount = 10
+# Optional numeric IDs, not a mutable repo/owner name:
+github_repository_id = ""
+github_owner_id = ""
