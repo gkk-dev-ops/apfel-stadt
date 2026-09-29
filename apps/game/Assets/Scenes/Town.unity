@@ -130,7 +130,7 @@ GameObject:
   - component: {fileID: 1370157117}
   - component: {fileID: 1370157116}
   m_Layer: 0
-  m_Name: Nasze Miasteczko
+  m_Name: Apfel Stadt
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

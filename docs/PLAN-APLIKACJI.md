@@ -1,4 +1,4 @@
-# Plan aplikacji — Nasze Miasteczko
+# Plan aplikacji — Apfel Stadt
 
 Wersja projektowa 0.2 · 10.09.2026 · gra dla Agi.
 

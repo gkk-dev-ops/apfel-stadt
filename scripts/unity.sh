@@ -27,7 +27,7 @@ if [[ "$action" == ios ]]; then
   [[ -d "$run_dir/Xcode/Unity-iPhone.xcodeproj" ]] || die "Unity reported success but Xcode export is missing. See $log_file"
   printf '%s\n' "$run_dir/Xcode" > "$TOWN_ROOT/builds/latest-ios.txt"
 elif [[ "$action" == macos ]]; then
-  [[ -d "$run_dir/Town.app" ]] || die "Unity reported success but app is missing. See $log_file"
-  printf '%s\n' "$run_dir/Town.app" > "$TOWN_ROOT/builds/latest-macos.txt"
+  [[ -d "$run_dir/Apfel Stadt.app" ]] || die "Unity reported success but app is missing. See $log_file"
+  printf '%s\n' "$run_dir/Apfel Stadt.app" > "$TOWN_ROOT/builds/latest-macos.txt"
 fi
 printf 'Output: %s\nLog: %s\n' "$run_dir" "$log_file"

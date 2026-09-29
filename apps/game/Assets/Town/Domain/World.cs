@@ -4,11 +4,11 @@ using System.Linq;
 
 namespace Town.Domain
 {
-    public enum BuildingKind { Road, House, Shop, Park, Cafe, Workshop, Clinic, Tree, Bench, Playground, Pond, Flowers }
+    public enum BuildingKind { Road, House, Shop, Park, Cafe, Workshop, Clinic, Tree, Bench, Playground, Pond, Flowers, Sidewalk }
     [Serializable] public sealed class Building
     {
         public string id;
-        public int kind, x, z, rotation;
+        public int kind, x, z, rotation, level = 1;
         public Building Copy() => (Building)MemberwiseClone();
     }
     [Serializable] public sealed class Family
@@ -21,7 +21,7 @@ namespace Town.Domain
     {
         public int schemaVersion = 1, simulationVersion = 1, contentVersion = 1;
         public string worldId, name;
-        public int width = 32, height = 32, seed = 42, money = 4000, speed = 1;
+        public int width = 32, height = 32, seed = 42, money = 4000, speed = 1, totalTenants;
         public long tick;
         public bool paused = true, sandbox;
         public List<Building> buildings = new List<Building>();
@@ -48,15 +48,16 @@ namespace Town.Domain
     {
         public readonly BuildingKind Kind;
         public readonly string Name;
-        public readonly int Cost, Maintenance, Radius;
-        public Definition(BuildingKind kind, string name, int cost, int maintenance = 0, int radius = 0)
-        { Kind = kind; Name = name; Cost = cost; Maintenance = maintenance; Radius = radius; }
+        public readonly int Cost, Maintenance, Radius, BaseTenants, TenantsPerLevel, MaxLevel, UpgradeBaseCost, UpgradeStepCost;
+        public Definition(BuildingKind kind, string name, int cost, int maintenance = 0, int radius = 0, int baseTenants = 0, int tenantsPerLevel = 0, int maxLevel = 1, int upgradeBaseCost = 0, int upgradeStepCost = 0)
+        { Kind = kind; Name = name; Cost = cost; Maintenance = maintenance; Radius = radius; BaseTenants = baseTenants; TenantsPerLevel = tenantsPerLevel;
+            MaxLevel = maxLevel; UpgradeBaseCost = upgradeBaseCost; UpgradeStepCost = upgradeStepCost; }
     }
     public static class Catalog
     {
         public static readonly Definition[] All = {
             new Definition(BuildingKind.Road, "Droga", 15),
-            new Definition(BuildingKind.House, "Dom", 180, 2),
+            new Definition(BuildingKind.House, "Dom", 180, 2, baseTenants:2, tenantsPerLevel:1, maxLevel:5, upgradeBaseCost:80, upgradeStepCost:35),
             new Definition(BuildingKind.Shop, "Sklep", 250, 5, 8),
             new Definition(BuildingKind.Park, "Park", 100, 2, 6),
             new Definition(BuildingKind.Cafe, "Kawiarnia", 220, 4, 7),
@@ -66,9 +67,27 @@ namespace Town.Domain
             new Definition(BuildingKind.Bench, "Ławka", 20, 0, 3),
             new Definition(BuildingKind.Playground, "Plac zabaw", 120, 2, 6),
             new Definition(BuildingKind.Pond, "Staw", 140, 1, 5),
-            new Definition(BuildingKind.Flowers, "Kwiaty", 10, 0, 2)
+            new Definition(BuildingKind.Flowers, "Kwiaty", 10, 0, 2),
+            new Definition(BuildingKind.Sidewalk, "Chodnik", 28, 0, maxLevel:1)
         };
         public static Definition Get(int kind) => All[kind];
+        public static int TenantCapacity(Building b)
+        {
+            if (b == null) return 0;
+            if (b.kind < 0 || b.kind >= All.Length) return 0;
+            return All[b.kind].BaseTenants + Math.Max(0, Math.Max(1, b.level) - 1) * All[b.kind].TenantsPerLevel;
+        }
+        public static int MaxLevelFor(int kind) => All[kind].MaxLevel;
+        public static int UpgradeCost(int kind, int nextLevel)
+        {
+            var def = All[kind];
+            if (nextLevel > def.MaxLevel || def.UpgradeBaseCost == 0) return int.MaxValue;
+            return def.UpgradeBaseCost + Math.Max(0, nextLevel - 2) * def.UpgradeStepCost;
+        }
+        public static bool CanUpgrade(int kind, int currentLevel) => currentLevel < All[kind].MaxLevel;
+        public static bool IsRoad(int kind) => kind == (int)BuildingKind.Road;
+        public static bool IsPavement(int kind) => kind == (int)BuildingKind.Sidewalk;
+        public static bool IsWalkableSurface(int kind) => IsRoad(kind) || IsPavement(kind);
     }
     public static class WorldValidation
     {
@@ -92,11 +111,12 @@ namespace Town.Domain
                     !cells.Add(b.z * w.width + b.x)) throw new ArgumentException("Nieprawidłowy lub nakładający się budynek.");
             }
             var homes = new HashSet<string>(w.buildings.Where(b => b.kind == (int)BuildingKind.House).Select(b => b.id));
-            var occupiedHomes = new HashSet<string>(); var familyIds = new HashSet<string>();
+            var familyIds = new HashSet<string>();
             foreach (var f in w.families)
                 if (f == null || !Id(f.id) || !familyIds.Add(f.id) || !homes.Contains(f.homeId) ||
-                    !occupiedHomes.Add(f.homeId) || string.IsNullOrWhiteSpace(f.name) || f.name.Length > 80 || f.mood < 0 || f.mood > 100)
+                    string.IsNullOrWhiteSpace(f.name) || f.name.Length > 80 || f.mood < 0 || f.mood > 100)
                     throw new ArgumentException("Nieprawidłowa rodzina.");
+            if(w.totalTenants<0) throw new ArgumentException("Nieprawidłowa liczba mieszkańców.");
             if (w.claimedGoals.Distinct().Count() != w.claimedGoals.Count || w.claimedGoals.Any(g => !Goals.All.Any(x => x.Id == g)))
                 throw new ArgumentException("Nieprawidłowe cele.");
         }
@@ -133,9 +153,16 @@ namespace Town.Domain
         Dictionary<int, Building> cells;
         static readonly int[] Dx = {1,-1,0,0}, Dz = {0,0,1,-1};
         public int LastBalance { get; private set; }
+        public int TotalTenants => State.totalTenants;
         public bool CanUndo => undo.Count > 0;
         public Simulation(World state) { Replace(state); }
-        public void Replace(World state) { WorldValidation.Validate(state); State = state; undo.Clear(); Invalidate(); }
+        public void Replace(World state) { WorldValidation.Validate(state); State = state; NormalizeState(); undo.Clear(); Invalidate(); }
+        void NormalizeState()
+        {
+            foreach(var b in State.buildings)
+                b.level=Math.Max(1,Math.Min(Catalog.MaxLevelFor(b.kind),Math.Max(1,b.level)));
+            RecalculateTenants();
+        }
         void Invalidate() { cells = null; roadNetwork = null; }
         void Index()
         {
@@ -176,7 +203,8 @@ namespace Town.Domain
             var error=CanPlace(kind,x,z);if(error!=null)return error;
             Remember();State.paused=true;
             if(!State.sandbox)State.money-=Catalog.Get(kind).Cost;
-            State.buildings.Add(new Building{id=Guid.NewGuid().ToString(),kind=kind,x=x,z=z,rotation=((rotation%4)+4)%4});
+            State.buildings.Add(new Building{id=Guid.NewGuid().ToString(),kind=kind,x=x,z=z,rotation=((rotation%4)+4)%4,level=1});
+            RecalculateTenants();
             Invalidate();return null;
         }
         public string Remove(int x,int z)
@@ -185,6 +213,7 @@ namespace Town.Domain
             Remember();State.paused=true;
             State.buildings.Remove(b);State.families.RemoveAll(f=>f.homeId==b.id);
             if(!State.sandbox)State.money=Math.Min(1000000000,State.money+Catalog.Get(b.kind).Cost/2);
+            RecalculateTenants();
             Invalidate();return null;
         }
         public string Move(string id,int x,int z,int rotation)
@@ -193,8 +222,22 @@ namespace Town.Domain
             if(x<0||x>=State.width||z<0||z>=State.height||(At(x,z)!=null&&At(x,z)!=b))return "Pole niedostępne";
             Remember();State.paused=true;b.x=x;b.z=z;b.rotation=((rotation%4)+4)%4;Invalidate();return null;
         }
+        public string Upgrade(string id)
+        {
+            var b=State.buildings.FirstOrDefault(v=>v.id==id);
+            if(b==null)return "Budynek nie istnieje";
+            int current=Math.Max(1,b.level);
+            if(!Catalog.CanUpgrade(b.kind,current))return "Budynek osiągnął maksymalny poziom";
+            int cost=Catalog.UpgradeCost(b.kind,current+1);
+            if(!State.sandbox&&State.money<cost)return "Brakuje pieniędzy";
+            Remember();State.paused=true;
+            if(!State.sandbox)State.money=Math.Max(0,State.money-cost);
+            b.level=current+1;
+            RecalculateTenants();
+            Invalidate();return null;
+        }
         public bool Undo()
-        { if(undo.Count==0)return false;State=undo.Pop();State.paused=true;Invalidate();return true; }
+        { if(undo.Count==0)return false;State=undo.Pop();State.paused=true;NormalizeState();Invalidate();return true; }
         public bool Claim(string id)
         {
             var g=Goals.All.FirstOrDefault(v=>v.Id==id);
@@ -208,10 +251,10 @@ namespace Town.Domain
             undo.Clear();State.tick++;
             if(State.tick%50!=0)return true;
             Index();
-            foreach(var home in State.buildings.Where(b=>b.kind==1&&Connected(b)))
+            foreach(var home in State.buildings.Where(b=>b.kind==(int)BuildingKind.House&&Connected(b)))
             {
                 if(State.families.Count>=512)break;
-                if(State.families.All(f=>f.homeId!=home.id))
+                if(Occupancy(home.id) < Math.Max(1, Capacity(home)))
                 {
                     string[] names={"Rodzina Agi","Zosia i Leon","Rodzina Nowaków","Maja i Tomek","Ola i Kuba","Julia i Adam","Iga i Filip","Hania i Jan"};
                     State.seed=(int)(((long)State.seed*1103515245+12345)&0x7fffffff);
@@ -229,10 +272,20 @@ namespace Town.Domain
                 }
                 f.mood=Math.Max(0,Math.Min(100,mood));
             }
-            int income=State.families.Sum(f=>8+f.mood/10), expense=State.buildings.Sum(b=>Catalog.Get(b.kind).Maintenance);
+            int income=State.families.Sum(f=>8+f.mood/10), expense=State.buildings.Sum(ExpenseFor);
+            State.totalTenants=Math.Max(0,State.families.Count);
             LastBalance=income-expense;
             if(!State.sandbox)State.money=(int)Math.Max(0,Math.Min(1000000000,(long)State.money+LastBalance));
             return true;
         }
+        public int Occupancy(string homeId)=>State.families.Count(f=>f.homeId==homeId);
+        public int Occupancy(Building home)=>home==null?0:Occupancy(home.id);
+        public int Capacity(Building home)=>home==null?0:Catalog.TenantCapacity(home);
+        int ExpenseFor(Building b)
+        {
+            if(b==null||b.kind<0||b.kind>=Catalog.All.Length) return 0;
+            return Catalog.Get(b.kind).Maintenance * Math.Max(1,b.level);
+        }
+        void RecalculateTenants()=>State.totalTenants=Math.Max(0,State.families.Count);
     }
 }

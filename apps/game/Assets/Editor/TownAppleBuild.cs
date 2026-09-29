@@ -29,7 +29,7 @@ namespace Town.Editor
             if(!flags.Contains("-fobjc-arc"))flags.Add("-fobjc-arc");project.SetCompileFlagsForFile(framework,file,flags);
             project.WriteToFile(path);
             var plistPath=Path.Combine(output,"Info.plist");var plist=new PlistDocument();plist.ReadFromFile(plistPath);
-            plist.root.SetString("CFBundleDisplayName","Nasze Miasteczko");
+            plist.root.SetString("CFBundleDisplayName","Apfel Stadt");
             plist.WriteToFile(plistPath);
         }
     }

@@ -1,9 +1,10 @@
-# Nasze Miasteczko — prototyp 0.2
+# Apfel Stadt — prototyp 0.2
 
 Kod osobistej gry dla Agi: Unity, Mac M2 i iPhone 16. Stan: 10.09.2026.
 
 **W pakiecie jest implementacja gry, klienta synchronizacji, API i infrastruktury.**
-To źródła prototypu, jeszcze bez wykonanego buildu Unity/Xcode i testu na sprzęcie Apple.
+Build macOS działa offline. Build iOS i instalacja na iPhonie również przeszły;
+szczegóły testów sprzętowych: [APPLE-SMOKE-TEST.md](docs/APPLE-SMOKE-TEST.md).
 Czysta domena C# oraz backend TypeScript przeszły testy opisane w [VALIDATION.md](docs/VALIDATION.md).
 
 ## Uruchomienie na Macu

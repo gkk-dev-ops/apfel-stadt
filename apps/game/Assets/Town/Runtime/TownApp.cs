@@ -13,9 +13,10 @@ namespace Town.Runtime
     public sealed class TownApp:MonoBehaviour
     {
         public Material worldMaterial,gridMaterial;
+        public Texture2D logo;
         enum Panel{None,Worlds,Cloud,Goals,Settings,History}
         LocalRepository repo;LocalWorld local;Simulation sim;TownView view;TownSession session;CloudSync cloud;
-        Panel panel;bool uiBusy,eco;int selectedKind=-1,rotation;string selectedId="",movingId="";
+        Panel panel;bool uiBusy,eco,menuVisible=true;bool menuWasPaused=false;int selectedKind=-1,rotation;string selectedId="",movingId="";
         string toast="",email="",password="",newName="Nowe miasteczko",cloudCursor="",historyCursor="";
         float toastUntil,accumulator,saveTimer,syncTimer,thermalTimer,healthySeconds;long writeSequence;
         bool uiScrollDragged;Vector2 uiTouchStart;
@@ -34,6 +35,8 @@ namespace Town.Runtime
         {
             Application.targetFrameRate=60;QualitySettings.vSyncCount=0;
             repo=new LocalRepository(Path.Combine(Application.persistentDataPath,"Worlds"),s=>JsonUtility.FromJson<LocalWorld>(s));
+            logo ??= Resources.Load<Texture2D>("ApfelStadtLogo");
+            if(logo==null) logo=BuildBrandLogo();
             var configAsset=Resources.Load<TextAsset>("TownClientConfig");
             var config=configAsset?JsonUtility.FromJson<ClientConfig>(configAsset.text):new ClientConfig();
             session=new TownSession(config);cloud=new CloudSync(session,()=>local,SaveNow,Preserve,FindLocal);
@@ -60,6 +63,7 @@ namespace Town.Runtime
         {
             local=value;sim=new Simulation(local.world);view.ResetWorld(local.world);view.Reconcile(local.world,sim);
             selectedId="";movingId="";selectedKind=-1;accumulator=0;saveTimer=0;syncTimer=0;panel=Panel.None;
+            menuWasPaused=local.world.paused;
         }
         void Demo()
         {
@@ -124,10 +128,44 @@ namespace Town.Runtime
             Application.targetFrameRate=level==0?30:60;QualitySettings.shadowDistance=level==0?12:45;
             if(pipeline){pipeline.renderScale=level==0?.75f:1;pipeline.shadowDistance=level==0?12:35;}
         }
+        Texture2D BuildBrandLogo()
+        {
+            const int logoWidth=160, logoHeight=64;
+            var tex=new Texture2D(logoWidth,logoHeight,TextureFormat.RGBA32,false);
+            textures.Add(tex);
+            var dark=new Color(.12f,.18f,.2f,1f);
+            var light=new Color(.78f,.95f,1f,1f);
+            var green=new Color(.28f,.73f,.53f,1f);
+            var gold=new Color(.98f,.74f,.33f,1f);
+            for(int y=0;y<logoHeight;y++)for(int x=0;x<logoWidth;x++)tex.SetPixel(x,y,new Color(0,0,0,0));
+            for(int y=6;y<58;y++)for(int x=8;x<150;x++)tex.SetPixel(x,y,Color.Lerp(new Color(.1f,.18f,.23f,.9f),new Color(.2f,.3f,.36f,.9f),((x+y)%16)/16f));
+            for(int x=26;x<134;x++)
+            {
+                for(int y=22;y<46;y++)tex.SetPixel(x,y,green);
+                tex.SetPixel(x,14,dark);tex.SetPixel(x,15,dark);
+            }
+            for(int x=28;x<132;x+=6)for(int y=10;y<22;y++)tex.SetPixel(x,y,gold);
+            for(int y=52;y<58;y++)for(int x=42;x<108;x++)tex.SetPixel(x,y,dark);
+            for(int x=30;x<34;x++)for(int y=32;y<52;y++)tex.SetPixel(x,y,light);
+            for(int x=52;x<56;x++)for(int y=28;y<52;y++)tex.SetPixel(x,y,light);
+            for(int x=74;x<78;x++)for(int y=36;y<52;y++)tex.SetPixel(x,y,light);
+            tex.Apply();
+            return tex;
+        }
         bool OverUi(Vector2 point)
         {
             float x=(point.x-Screen.safeArea.x)/Scale,y=(Screen.safeArea.yMax-point.y)/Scale;
-            return panel!=Panel.None||x<0||x>W||y<0||y>H||y<68||y>H-94||x>W-260;
+            if(menuVisible)return true;
+            if(panel!=Panel.None)return true;
+            return false;
+        }
+        void ToggleMenu()
+        {
+            if(local==null)return;
+            menuVisible=!menuVisible;
+            Feedback(true);
+            if(menuVisible){local.world.paused=menuWasPaused;}
+            else{menuWasPaused=local.world.paused;local.world.paused=true;panel=Panel.None;selectedKind=-1;movingId="";}
         }
         void InputUpdate()
         {
@@ -152,14 +190,20 @@ namespace Town.Runtime
             if(held&&(Input.GetMouseButton(0)||Input.GetMouseButton(1)||Input.GetMouseButton(2)))MovePointer(mouse);
             if(Input.GetMouseButtonUp(0))EndPointer(mouse);
             if(Input.GetMouseButtonUp(1)||Input.GetMouseButtonUp(2))held=false;
-            if(!OverUi(mouse)&&Mathf.Abs(Input.mouseScrollDelta.y)>.01f){view.Zoom*=Mathf.Pow(.9f,Input.mouseScrollDelta.y);view.ApplyCamera();}
+            if(!OverUi(mouse)&&Mathf.Abs(Input.mouseScrollDelta.y)>.01f){ApplyZoom(Mathf.Pow(.9f,Input.mouseScrollDelta.y));}
+            bool zoomIn=(Input.GetKey(KeyCode.LeftCommand)||Input.GetKey(KeyCode.RightCommand)||Input.GetKey(KeyCode.LeftControl)||Input.GetKey(KeyCode.RightControl));
+            if(zoomIn && (Input.GetKeyDown(KeyCode.Equals)||Input.GetKeyDown(KeyCode.KeypadPlus)||Input.GetKeyDown(KeyCode.Plus)))ApplyZoom(.9f);
+            if(zoomIn && (Input.GetKeyDown(KeyCode.Minus)||Input.GetKeyDown(KeyCode.KeypadMinus)))ApplyZoom(1/.9f);
             if(Input.GetKeyDown(KeyCode.R)){rotation=(rotation+1)%4;}
             if(Input.GetKey(KeyCode.Q))view.Yaw-=50*Time.unscaledDeltaTime;
             if(Input.GetKey(KeyCode.E))view.Yaw+=50*Time.unscaledDeltaTime;
-            if(Input.GetKeyDown(KeyCode.Space)){local.world.paused=!local.world.paused;Mark();}
+            if(Input.GetKeyDown(KeyCode.Escape))ToggleMenu();
+            if(Input.GetKeyDown(KeyCode.Space)){ToggleMenu();}
             if((Input.GetKey(KeyCode.LeftControl)||Input.GetKey(KeyCode.LeftCommand))&&Input.GetKeyDown(KeyCode.Z))Undo();
             view.ApplyCamera();Preview(mouse);
         }
+        void ApplyZoom(float factor)
+        {view.Zoom*=factor;view.ApplyCamera();}
         void BeginPointer(Vector2 p){if(OverUi(p)){held=false;return;}held=true;dragged=false;down=p;lastPointer=p;}
         void MovePointer(Vector2 p)
         {if(!held)return;if(Vector2.Distance(down,p)>12*Scale)dragged=true;
@@ -184,6 +228,15 @@ namespace Town.Runtime
             Mark();view.Reconcile(local.world,sim);view.Select(local.world.buildings.FirstOrDefault(b=>b.id==selectedId));Feedback(true);SaveLater();
         }
         void Undo(){if(sim.Undo()){Mark();view.Reconcile(local.world,sim);view.Select(null);Feedback(true);SaveLater();}else Note("Cofanie jest dostępne podczas edycji na pauzie.");}
+        void QuitGame()
+        {
+            Try(SaveNow);
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying=false;
+#else
+            Application.Quit();
+#endif
+        }
         void OnApplicationPause(bool pause){if(pause){Try(SaveNow);AppleServices.Suspend();}else{accumulator=0;syncTimer=120;}}
         void OnApplicationFocus(bool focus){if(!focus)Try(SaveNow);else accumulator=0;}
         void OnApplicationQuit(){Try(SaveNow);}
@@ -208,35 +261,53 @@ namespace Town.Runtime
             if(local==null)return;Styles();
             if(uiScrollDragged&&Event.current.type==EventType.MouseUp){Event.current.Use();uiScrollDragged=false;}
             GUI.matrix=Matrix4x4.TRS(new Vector3(Screen.safeArea.x,Screen.height-Screen.safeArea.yMax,0),Quaternion.identity,new Vector3(Scale,Scale,1));
-            GUI.Box(new Rect(0,0,W,64),GUIContent.none,box);GUI.Label(new Rect(16,5,W-520,29),local.world.name,title);
-            string stats=(local.world.sandbox?"Swobodne budowanie":local.world.money+" zł")+"   ·   "+local.world.families.Count+" rodzin   ·   dzień "+(local.world.tick/300+1);
-            GUI.Label(new Rect(16,35,W-520,25),stats,small);
-            if(Btn(new Rect(W-495,7,90,50),local.world.paused?"Graj":"Pauza")){local.world.paused=!local.world.paused;selectedKind=-1;movingId="";Mark();}
-            if(Btn(new Rect(W-399,7,62,50),local.world.speed+"×")){local.world.speed=local.world.speed==4?1:local.world.speed*2;Mark();}
-            if(Btn(new Rect(W-331,7,100,50),"Światy"))OpenPanel(Panel.Worlds);
-            if(Btn(new Rect(W-225,7,105,50),"Chmura"))OpenPanel(Panel.Cloud);
-            if(Btn(new Rect(W-114,7,105,50),"Opcje"))OpenPanel(Panel.Settings);
-            GUI.Box(new Rect(W-252,73,252,H-173),GUIContent.none,box);
-            GUILayout.BeginArea(new Rect(W-238,85,224,H-196));
-            var selected=local.world.buildings.FirstOrDefault(b=>b.id==selectedId);
-            if(selected!=null){GUILayout.Label(Catalog.Get(selected.kind).Name,title);GUILayout.Label(sim.Connected(selected)?"Połączony z drogą wjazdową":"Brak połączenia z wjazdem po lewej",label);
-                var family=local.world.families.FirstOrDefault(f=>f.homeId==selected.id);if(family!=null)GUILayout.Label(family.name+"\nZadowolenie: "+family.mood+"%",label);
-                if(Wide("Przenieś / obróć")){movingId=selected.id;selectedKind=-1;local.world.paused=true;Mark();Note("Wybierz nowe pole. Obrót: przycisk ↻ lub R.");}}
-            else{GUILayout.Label("Twoja okolica",title);GUILayout.Label(local.world.families.Count==0?"Zbuduj dom przy drodze i naciśnij Graj. Rodziny pojawią się po chwili.":
-                "Zadowolenie: "+Mathf.RoundToInt((float)local.world.families.Average(f=>f.mood))+"%\nBilans: "+sim.LastBalance+" zł / okres",label);
-                GUILayout.Label("Sklep, praca, park, kawiarnia i przychodnia blisko domów poprawiają nastrój.",small);}
-            if(Wide("Cele i nagrody"))OpenPanel(Panel.Goals);
-            if(Wide("Obrót ↻")){rotation=(rotation+1)%4;if(movingId=="")view.Yaw+=90;view.ApplyCamera();}
-            GUILayout.EndArea();
-            GUI.Box(new Rect(0,H-94,W,94),GUIContent.none,box);
-            catalogScroll=GUI.BeginScrollView(new Rect(0,H-91,W,89),catalogScroll,new Rect(0,0,16*102,68));
-            if(Btn(new Rect(5,3,96,63),"Poznaj",selectedKind==-1&&movingId=="")){selectedKind=-1;movingId="";}
-            for(int i=0;i<Catalog.All.Length;i++)if(Btn(new Rect((i+1)*102+5,3,96,63),Catalog.All[i].Name+"\n"+Catalog.All[i].Cost+" zł",selectedKind==i))
-                {selectedKind=i;movingId="";local.world.paused=true;Mark();}
-            if(Btn(new Rect(13*102+5,3,96,63),"Usuń\nzwrot 50%",selectedKind==-2)){selectedKind=-2;movingId="";}
-            if(Btn(new Rect(14*102+5,3,96,63),"Cofnij"))Undo();
-            if(Btn(new Rect(15*102+5,3,96,63),"Obróć\n"+(rotation*90)+"°")){rotation=(rotation+1)%4;}
-            GUI.EndScrollView();
+            if(menuVisible){
+                if(logo!=null)GUI.DrawTexture(new Rect(16,5,92,42),logo,ScaleMode.ScaleToFit,true);
+                float titleX = logo != null ? 114 : 16;
+                GUI.Box(new Rect(0,0,W,64),GUIContent.none,box);
+                GUI.Label(new Rect(titleX,5,W-520,29),local.world.name,title);
+                GUI.Label(new Rect(titleX,5,W-520,29),local.world.name,title);
+                string stats=(local.world.sandbox?"Swobodne budowanie":local.world.money+" zł")+"   ·   "+sim.TotalTenants+" mieszkańców   ·   dzień "+(local.world.tick/300+1);
+                GUI.Label(new Rect(titleX,35,W-520,25),stats,small);
+                if(Btn(new Rect(W-495,7,90,50),local.world.paused?"Graj":"Pauza")){local.world.paused=!local.world.paused;selectedKind=-1;movingId="";Mark();}
+                if(Btn(new Rect(W-399,7,62,50),local.world.speed+"×")){local.world.speed=local.world.speed==4?1:local.world.speed*2;Mark();}
+                if(Btn(new Rect(W-331,7,100,50),"Światy"))OpenPanel(Panel.Worlds);
+                if(Btn(new Rect(W-225,7,105,50),"Chmura"))OpenPanel(Panel.Cloud);
+                if(Btn(new Rect(W-114,7,105,50),"Opcje"))OpenPanel(Panel.Settings);
+                GUI.Box(new Rect(W-252,73,252,H-173),GUIContent.none,box);
+                GUILayout.BeginArea(new Rect(W-238,85,224,H-196));
+                var selected=local.world.buildings.FirstOrDefault(b=>b.id==selectedId);
+                if(selected!=null){GUILayout.Label(Catalog.Get(selected.kind).Name,title);GUILayout.Label(sim.Connected(selected)?"Połączony z drogą wjazdową":"Brak połączenia z wjazdem po lewej",label);
+                    GUILayout.Label("Poziom: "+Mathf.Max(1,selected.level)+"   ·   "+sim.Occupancy(selected.id)+" / "+sim.Capacity(selected)+" mieszkańców",label);
+                    if(Catalog.CanUpgrade(selected.kind,Mathf.Max(1,selected.level)))
+                    {
+                        int next=Mathf.Max(1,selected.level)+1;
+                        int cost=Catalog.UpgradeCost(selected.kind,next);
+                        if(Wide("Rozwiń "+next+" ("+cost+" zł)"))
+                        {
+                            var result=sim.Upgrade(selected.id);
+                            if(result==null){Mark();view.Reconcile(local.world,sim);view.Select(local.world.buildings.FirstOrDefault(b=>b.id==selected.id));Feedback(true,2);SaveLater();}
+                            else {Feedback(false);Note(result);}
+                        }
+                    }
+                    var family=local.world.families.FirstOrDefault(f=>f.homeId==selected.id);if(family!=null)GUILayout.Label(family.name+"\nZadowolenie: "+family.mood+"%",label);
+                    if(Wide("Przenieś / obróć")){movingId=selected.id;selectedKind=-1;local.world.paused=true;Mark();Note("Wybierz nowe pole. Obrót: przycisk ↻ lub R.");}}
+                else{GUILayout.Label("Twoja okolica",title);GUILayout.Label(local.world.families.Count==0?"Zbuduj dom przy drodze i naciśnij Graj. Rodziny pojawią się po chwili.":
+                    "Zadowolenie: "+Mathf.RoundToInt((float)local.world.families.Average(f=>f.mood))+"%\nBilans: "+sim.LastBalance+" zł / okres",label);
+                    GUILayout.Label("Sklep, praca, park, kawiarnia i przychodnia blisko domów poprawiają nastrój.",small);}
+                if(Wide("Cele i nagrody"))OpenPanel(Panel.Goals);
+                if(Wide("Obrót ↻")){rotation=(rotation+1)%4;if(movingId=="")view.Yaw+=90;view.ApplyCamera();}
+                GUILayout.EndArea();
+                GUI.Box(new Rect(0,H-94,W,94),GUIContent.none,box);
+                catalogScroll=GUI.BeginScrollView(new Rect(0,H-91,W,89),catalogScroll,new Rect(0,0,16*102,68));
+                if(Btn(new Rect(5,3,96,63),"Poznaj",selectedKind==-1&&movingId=="")){selectedKind=-1;movingId="";}
+                for(int i=0;i<Catalog.All.Length;i++)if(Btn(new Rect((i+1)*102+5,3,96,63),Catalog.All[i].Name+"\n"+Catalog.All[i].Cost+" zł",selectedKind==i))
+                    {selectedKind=i;movingId="";local.world.paused=true;Mark();}
+                if(Btn(new Rect(13*102+5,3,96,63),"Usuń\nzwrot 50%",selectedKind==-2)){selectedKind=-2;movingId="";}
+                if(Btn(new Rect(14*102+5,3,96,63),"Cofnij"))Undo();
+                if(Btn(new Rect(15*102+5,3,96,63),"Obróć\n"+(rotation*90)+"°")){rotation=(rotation+1)%4;}
+                GUI.EndScrollView();
+            }
             if(panel!=Panel.None)DrawPanel();
             if(Time.unscaledTime<toastUntil){GUI.Box(new Rect(20,H-147,Mathf.Max(220,W-290),47),GUIContent.none,box);GUI.Label(new Rect(30,H-142,Mathf.Max(200,W-310),42),toast,small);}
             GUI.matrix=Matrix4x4.identity;
@@ -294,7 +365,8 @@ namespace Town.Runtime
                     if(Wide("Grafika: "+(eco?"oszczędzanie baterii":"automatyczna"))){eco=!eco;PlayerPrefs.SetInt("eco",eco?1:0);qualityLevel=-1;healthySeconds=20;AdjustQuality(5);}
                     if(Wide("Eksportuj świat"))Try(()=>{SaveNow();if(!AppleServices.Share(repo.FilePath(local.world.worldId)))Note("Plik świata zapisano w folderze danych aplikacji.");});
                     if(Wide("Zrób zdjęcie miasta"))Run(Photo);
-                    GUILayout.Label("Przesuwanie: przeciągnij mapę. Zoom: dwa palce lub kółko. Mac: Q/E obrót, R obrót budynku, spacja pauza, ⌘Z cofanie.",small);
+                    if(Wide("Zapisz i zamknij grę"))QuitGame();
+                    GUILayout.Label("Przesuwanie: przeciągnij mapę. Zoom: dwa palce lub kółko. Mac: Q/E obrót, R obrót budynku, Spacja ukrywa/pokazuje interfejs, ⌘Z cofanie.",small);
                     break;
             }
             GUILayout.EndScrollView();GUILayout.EndArea();GUI.enabled=true;
@@ -308,7 +380,7 @@ namespace Town.Runtime
             int width=1600,height=Mathf.RoundToInt(1600f*Screen.height/Screen.width);var target=new RenderTexture(width,height,24);
             var previous=RenderTexture.active;var oldTarget=view.Camera.targetTexture;Texture2D image=null;
             try{RenderPipeline.SubmitRenderRequest(view.Camera,new UniversalRenderPipeline.SingleCameraRequest{destination=target});RenderTexture.active=target;image=new Texture2D(width,height,TextureFormat.RGB24,false);
-                image.ReadPixels(new Rect(0,0,width,height),0,0);image.Apply();var path=Path.Combine(Application.temporaryCachePath,"Town-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+".png");
+                image.ReadPixels(new Rect(0,0,width,height),0,0);image.Apply();var path=Path.Combine(Application.temporaryCachePath,"ApfelStadt-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+".png");
                 File.WriteAllBytes(path,image.EncodeToPNG());AppleServices.Share(path);Note("Zdjęcie miasta gotowe.");}
             finally{view.Camera.targetTexture=oldTarget;RenderTexture.active=previous;target.Release();Destroy(target);if(image)Destroy(image);}
         }

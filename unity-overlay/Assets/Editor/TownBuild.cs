@@ -33,7 +33,7 @@ namespace Town.Editor
             public string authProjectId;
         }
 
-        [MenuItem("Town/Prepare playable project")]
+        [MenuItem("Apfel Stadt/Prepare playable project")]
         public static void PrepareGame()
         {
             Directory.CreateDirectory("Assets/Town/Generated");Directory.CreateDirectory("Assets/Scenes");
@@ -55,7 +55,8 @@ namespace Town.Editor
             PlayerSettings.allowedAutorotateToLandscapeLeft=true;PlayerSettings.allowedAutorotateToLandscapeRight=true;
             PlayerSettings.defaultScreenWidth=1440;PlayerSettings.defaultScreenHeight=900;
             PlayerSettings.runInBackground=false;
-            PlayerSettings.companyName="Our Town";PlayerSettings.productName="Town";
+            PlayerSettings.companyName="Apfel Stadt";PlayerSettings.productName="Apfel Stadt";
+            ConfigureLogo();
             var settings=new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/ProjectSettings.asset")[0]);
             var input=settings.FindProperty("activeInputHandler");if(input!=null){input.intValue=0;settings.ApplyModifiedPropertiesWithoutUndo();}
             ConfigurePlugins();
@@ -68,12 +69,12 @@ namespace Town.Editor
                 var grid=AssetDatabase.LoadAssetAtPath<Material>(root+"Grid.mat");
                 if(!grid){grid=new Material(unlit){color=new Color(.51f,.61f,.43f)};AssetDatabase.CreateAsset(grid,root+"Grid.mat");}
                 var scene=EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
-                var app=new GameObject("Nasze Miasteczko",typeof(TownApp)).GetComponent<TownApp>();
+                var app=new GameObject("Apfel Stadt",typeof(TownApp)).GetComponent<TownApp>();
                 app.worldMaterial=material;app.gridMaterial=grid;
                 EditorSceneManager.SaveScene(scene,scenePath);
             }
             EditorBuildSettings.scenes=new[]{new EditorBuildSettingsScene(scenePath,true)};
-            AssetDatabase.SaveAssets();Debug.Log("Playable Town scene prepared. Open Assets/Scenes/Town.unity and press Play.");
+            AssetDatabase.SaveAssets();Debug.Log("Playable Apfel Stadt scene prepared. Open Assets/Scenes/Town.unity and press Play.");
         }
         static void ConfigurePlugins()
         {
@@ -88,10 +89,51 @@ namespace Town.Editor
             }
         }
 
+        static void ConfigureLogo()
+        {
+            const string iconPath = "Assets/Town/Generated/AppIcon.png";
+            if(!File.Exists(iconPath))
+            {
+                Debug.Log($"App logo missing for executable: add {iconPath} to set storefront icon.");
+                return;
+            }
+            var icon = AssetDatabase.LoadAssetAtPath<Texture2D>(iconPath);
+            if(!icon)
+            {
+                Debug.LogWarning($"Unable to load app icon texture from {iconPath}.");
+                return;
+            }
+            ApplyIcons(BuildTargetGroup.Standalone, IconKind.Application, icon);
+            ApplyIcons(BuildTargetGroup.iOS, IconKind.Application, icon);
+            ApplyIcons(BuildTargetGroup.Standalone, IconKind.Notification, icon);
+            ApplyIcons(BuildTargetGroup.Standalone, IconKind.Settings, icon);
+            ApplyIcons(BuildTargetGroup.Standalone, IconKind.Spotlight, icon);
+        }
+
+        static void ApplyIcons(BuildTargetGroup group, IconKind kind, Texture2D icon)
+        {
+            try
+            {
+                var icons = PlayerSettings.GetIconsForTargetGroup(group, kind);
+                if(icons==null||icons.Length==0)
+                {
+                    var sizes = PlayerSettings.GetIconSizesForTargetGroup(group, kind);
+                    if(sizes==null||sizes.Length==0)return;
+                    icons = new Texture2D[sizes.Length];
+                }
+                for(int i=0;i<icons.Length;i++)icons[i]=icon;
+                PlayerSettings.SetIconsForTargetGroup(group, icons, kind);
+            }
+            catch(Exception e)
+            {
+                Debug.LogWarning($"Could not configure app icons for {group}/{kind}: {e.Message}");
+            }
+        }
+
         public static void MacOS()
         {
             UnityEditor.OSXStandalone.UserBuildSettings.architecture = OSArchitecture.ARM64;
-            Build(BuildTarget.StandaloneOSX, NamedBuildTarget.Standalone, "Town.app");
+            Build(BuildTarget.StandaloneOSX, NamedBuildTarget.Standalone, "Apfel Stadt.app");
         }
 
         public static void IOS()
@@ -126,7 +168,7 @@ namespace Town.Editor
             if (string.IsNullOrWhiteSpace(outputRoot))
                 throw new BuildFailedException("Use scripts/unity.sh to provide an isolated output directory.");
             var output = Path.GetFullPath(Path.Combine(outputRoot, child));
-            PlayerSettings.productName = "Town";
+            PlayerSettings.productName = "Apfel Stadt";
             PlayerSettings.SetApplicationIdentifier(namedTarget, bundle);
             PlayerSettings.SetScriptingBackend(namedTarget, ScriptingImplementation.IL2CPP);
             PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);

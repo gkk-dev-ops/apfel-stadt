@@ -1,5 +1,12 @@
 # Validation — 2026-09-10, implementation 0.2
 
+## Apple hardware follow-up
+
+Real macOS and iPhone build/install results are recorded in
+[APPLE-SMOKE-TEST.md](APPLE-SMOKE-TEST.md). The sections below describe the original
+source-package validation environment; its lack of Unity/Xcode no longer describes
+the target Mac.
+
 ## Passed in this workspace
 
 - Pure C# domain/persistence compiled with the official .NET 8.0.425 SDK compiler and ran on

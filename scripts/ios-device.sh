@@ -37,7 +37,7 @@ xcodebuild "${build_args[@]}" -scheme Unity-iPhone -configuration Release \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
   "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic build
 # Release here is the Xcode configuration; Unity development flag was chosen at export.
-app="$derived/Build/Products/Release-iphoneos/Town.app"
+app="$derived/Build/Products/Release-iphoneos/Apfel Stadt.app"
 if [[ ! -d "$app" ]]; then
   candidates=("$derived/Build/Products/Release-iphoneos/"*.app)
   [[ "${#candidates[@]}" == 1 && -d "${candidates[0]}" ]] || die 'Expected exactly one built .app.'
